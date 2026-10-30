@@ -56,5 +56,6 @@ def test_parser_khoros2_glyph_form_and_options(tmp_path):
         "Glyph:DATAMANIP:kmul::55:385:105:: \n#GlyphEnd\nNodeConnection:7:o:55:i1:\n")
     hws = HistoricalWorkspaceParser().parse(w)
     assert [(g.oname, g.ident) for g in hws.glyphs] == [('kfft', 7), ('kmul', 55)]
+    assert [(c.out_id, c.out_port, c.in_id, c.in_port) for c in hws.connections] == [(7, 'o', 55, 'i1')]
     assert parse_command(hws.glyphs[0].command)[1] == {'dir': 0, 'center': 1, 'scale': 1, 'w': True}
     assert parse_command('kclip -lc -3.5 -uc 5')[1] == {'lc': -3.5, 'uc': 5}

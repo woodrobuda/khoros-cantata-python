@@ -51,10 +51,11 @@ class HistoricalWorkspaceParser:
             if not line: continue
             if line == '#GlyphBegin' or line == '#ConnectionBegin':
                 mode='glyph' if 'Glyph' in line else 'connection'; continue
+            # End markers must be handled before the generic comment skip, otherwise the
+            # glyph mode leaks past #GlyphEnd and NodeConnection lines are swallowed.
+            if line in ('#ConnectionEnd','#GlyphEnd'): mode=None; continue
             if line.startswith('#') and not line.startswith('#Annotations') and not line.startswith('#Variables'):
                 continue
-            if line == '#ConnectionEnd': mode=None; continue
-            if line == '#GlyphEnd': mode=None; continue
             if line == '#AnnotationsBegin':
                 while i<len(lines) and lines[i].strip()!='#AnnotationsEnd':
                     if lines[i].strip(): out.annotations.append(lines[i].rstrip())
