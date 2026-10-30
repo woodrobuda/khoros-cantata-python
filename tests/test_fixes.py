@@ -46,3 +46,15 @@ def test_cli_degrades_without_corpus(monkeypatch):
         p = subprocess.run([sys.executable, '-m', 'khoros_cantata.cli', cmd], capture_output=True, text=True,
                            env={'KHOROS_SOURCE_ROOT': '/nonexistent', 'PATH': ''})
         assert p.returncode == 0, p.stderr
+
+
+def test_parser_khoros2_glyph_form_and_options(tmp_path):
+    from khoros_cantata.workspace_runtime import parse_command
+    w = tmp_path / 'k2.wk'
+    w.write_text(
+        "#GlyphBegin\nGlyph:DATAMANIP:kfft::7:185:225:: -dir 0 -center 1 -scale 1 -w \n"
+        "Glyph:DATAMANIP:kmul::55:385:105:: \n#GlyphEnd\nNodeConnection:7:o:55:i1:\n")
+    hws = HistoricalWorkspaceParser().parse(w)
+    assert [(g.oname, g.ident) for g in hws.glyphs] == [('kfft', 7), ('kmul', 55)]
+    assert parse_command(hws.glyphs[0].command)[1] == {'dir': 0, 'center': 1, 'scale': 1, 'w': True}
+    assert parse_command('kclip -lc -3.5 -uc 5')[1] == {'lc': -3.5, 'uc': 5}

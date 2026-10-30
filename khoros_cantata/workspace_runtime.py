@@ -73,6 +73,14 @@ class HistoricalWorkspaceParser:
                 if i<len(lines): i+=1
                 continue
             if line.startswith('Glyph:'):
+                # Khoros 2.x cantata form: Glyph:TB:ONAME:LABEL:ID:X:Y:VARS:COMMAND
+                # (LABEL usually empty, e.g. "Glyph:DATAMANIP:kfft::7:185:225:: -dir 0").
+                q=line.split(':',8)
+                if len(q)>=8 and not q[3].lstrip('-').isdigit() and q[4].lstrip('-').isdigit():
+                    try:
+                        out.glyphs.append(HistoricalGlyph(q[1],q[2],q[3] or q[2],int(q[4]),int(q[5]),int(q[6]),q[7],q[8] if len(q)>8 else ''))
+                        continue
+                    except ValueError: pass
                 p=line.split(':',8)
                 if len(p)>=8:
                     _,tb,oname,ident,x,y,variables,rest = p[:8] if len(p)==8 else (p[0],p[1],p[2],p[3],p[4],p[5],p[6],':'.join(p[7:]))
@@ -177,17 +185,19 @@ def parse_command(command: str) -> tuple[list[str],dict[str,Any]]:
     try: toks=shlex.split(command, posix=True)
     except ValueError: toks=command.split()
     # Locate program after an optional historical absolute path.
-    program=''; args=[]
+    program=''; args=[]; started=False
     for t in toks:
-        if not program and not t.startswith('-'):
-            program=Path(t).name; continue
-        if program: args.append(t)
+        if not started and not t.startswith('-'):
+            program=Path(t).name; started=True; continue
+        # Khoros 2.x workspaces store only the options (no program name).
+        started=True; args.append(t)
     params={}; i=0
     while i<len(args):
         t=args[i]
         if t.startswith('-'):
             k=t.lstrip('-')
-            if i+1<len(args) and not args[i+1].startswith('-'): params[k]=args[i+1]; i+=2
+            nxt=args[i+1] if i+1<len(args) else None
+            if nxt is not None and (not nxt.startswith('-') or re.fullmatch(r'-\d*\.?\d+([eE][-+]?\d+)?',nxt)): params[k]=nxt; i+=2
             else: params[k]=True; i+=1
         else: i+=1
     for k,v in list(params.items()):

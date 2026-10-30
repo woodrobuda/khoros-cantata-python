@@ -7,7 +7,7 @@ name = "khoros-cantata-python"
 version = "0.22.0"
 description = "Python-native compatibility layers for recovered Khoros/Cantata behavior"
 requires-python = ">=3.11"
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
