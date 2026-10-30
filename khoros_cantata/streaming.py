@@ -172,7 +172,8 @@ POINTWISE = ['karith1', 'karith2', 'kadd', 'ksub', 'kmul', 'kdiv', 'kdivinto', '
              'klogexp', 'kbessel', 'kblend', 'kgate', 'kinverse', 'kcmplx', 'kreal2cmplx', 'kcmplx2real', 'kmag',
              'kreplace', 'kmapdata', 'kunmask', 'kconvert', 'identity']
 
-#: operators that need the whole record (or future samples); reason shown on rejection
+#: operators that need the whole record (or future samples); reason shown on rejection.
+#: Keys are 'name' or 'TOOLBOX:name'.
 NON_CAUSAL: dict[str, str] = {
     'kfft': 'FFT over the whole record', 'kspectrum': 'FFT over the whole record', 'kpsd': 'spectral estimate over the whole record',
     'khilbert': 'Hilbert transform (FFT, two-sided)', 'kdwt': 'block wavelet transform (wavelet denoise needs the whole block)',
@@ -191,9 +192,14 @@ class NonCausal(Exception):
     pass
 
 
-def register_streamable(name, factory):
-    """Declare an operator streamable. ``factory(params, batch_op, connected) -> StreamOp``."""
-    STREAMABLE[name.lower()] = factory
+def register_streamable(name, factory, toolbox='*'):
+    """Declare an operator streamable. ``factory(params, batch_op, connected) -> StreamOp``.
+    ``toolbox`` scopes the declaration (e.g. 'SIGTRADE'); '*' applies to any toolbox."""
+    STREAMABLE[name.lower() if toolbox == '*' else f'{toolbox.upper()}:{name.lower()}'] = factory
+
+
+def _factory(name, toolbox='*'):
+    return STREAMABLE.get(f'{toolbox.upper()}:{name}') or STREAMABLE.get(name)
 
 
 for _n in POINTWISE:
@@ -232,13 +238,14 @@ register_streamable('kdiff', lambda p, op, c: DiffStream(p.get('fill', 0.0)))
 register_streamable('kcross', lambda p, op, c: CrossStream(p.get('real', 0)))
 
 
-def classify(name, params=None, connected=()):
+def classify(name, params=None, connected=(), toolbox='*'):
     """Return ('streamable'|'non-causal'|'undeclared', reason)."""
-    name = name.lower(); params = params or {}
-    if name in STREAMABLE:
-        try: STREAMABLE[name](params, None, set(connected)); return 'streamable', ''
+    name = name.lower(); params = params or {}; f = _factory(name, toolbox)
+    if f is not None:
+        try: f(params, None, set(connected)); return 'streamable', ''
         except NonCausal as e: return 'non-causal', str(e)
-    if name in NON_CAUSAL: return 'non-causal', NON_CAUSAL[name]
+    for key in (f'{toolbox.upper()}:{name}', name):
+        if key in NON_CAUSAL: return 'non-causal', NON_CAUSAL[key]
     return 'undeclared', 'operator has not declared a causal streaming interface'
 
 # ====================================================================== I/O and wrapper glyphs (batch side)
@@ -295,11 +302,11 @@ class StreamingExecutor:
                 if inner is None: problems.append((g.ident, name, f"unknown wrapped operator {p.get('op')!r}"))
                 else: n.op = RollingCausal(inner, _inner_params(p), p.get('window', 32))
             else:
-                status, why = classify(name, p, connected)
+                status, why = classify(name, p, connected, g.toolbox)
                 if status != 'streamable':
                     problems.append((g.ident, name, f'{status}: {why}; wrap it as STREAM:krolling -op {name} -window N'))
                 else:
-                    n.op = STREAMABLE[name](p, self.registry.resolve(g.toolbox, name), connected)
+                    n.op = _factory(name, g.toolbox)(p, self.registry.resolve(g.toolbox, name), connected)
             self.nodes[g.ident] = n
         if problems: raise NonCausalGraphError(problems)
         self.order = self._toposort()

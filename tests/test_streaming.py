@@ -96,6 +96,16 @@ def test_non_causal_graph_rejected(tmp_path, tb, op, cmd):
     assert op in str(e.value) and 'krolling' in str(e.value)
 
 
+def test_toolbox_scoped_declarations(tmp_path):
+    from khoros_cantata.streaming import register_streamable, Pointwise, STREAMABLE, NON_CAUSAL
+    register_streamable('kfoo', lambda p, op, c: Pointwise(op, p), toolbox='MYTB')
+    try:
+        assert classify('kfoo', toolbox='MYTB')[0] == 'streamable' and classify('kfoo')[0] == 'undeclared'
+        NON_CAUSAL['MYTB:kbar'] = 'whole record'; assert classify('kbar', toolbox='mytb') == ('non-causal', 'whole record')
+    finally:
+        STREAMABLE.pop('MYTB:kfoo'); NON_CAUSAL.pop('MYTB:kbar', None)
+
+
 def test_classification_reasons():
     assert classify('kiir', {'zerophase': 1})[0] == 'non-causal' and classify('kiir')[0] == 'streamable'
     assert classify('kfft')[0] == 'non-causal' and classify('mmul')[0] == 'undeclared'
