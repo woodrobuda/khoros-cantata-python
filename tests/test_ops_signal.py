@@ -101,3 +101,15 @@ def test_dwt_roundtrip(w):
     assert np.isclose(sum((v ** 2).sum() for v in c), (x ** 2).sum())
     assert np.allclose(S.kidwt(c, w), x)
     assert np.allclose(S.kdwt([1, 1, 1, 1], 'haar')[1], 0)
+
+
+def test_causal_primitives():
+    pd = pytest.importorskip('pandas')
+    x = np.random.default_rng(0).normal(size=300).cumsum()
+    assert np.allclose(S.kema(x, span=10), pd.Series(x).ewm(span=10, adjust=False).mean())
+    assert np.allclose(S.krunstats(x, 'mean'), pd.Series(x).expanding().mean())
+    assert np.allclose(S.krunstats(x, 'std'), pd.Series(x).expanding().std(ddof=0))
+    assert np.allclose(S.krunstats(x, 'mean', 20)[19:], pd.Series(x).rolling(20).mean()[19:])
+    assert np.allclose(S.krunstats(x, 'min'), np.minimum.accumulate(x)) and np.allclose(S.krunstats(x, 'sum', 3)[2], x[:3].sum())
+    assert np.allclose(S.kdelay([1., 2, 3], 2, -1), [-1, -1, 1]) and np.allclose(S.kdiff([1., 3, 6]), [0, 2, 3])
+    assert np.allclose(S.kcross([1., 3, 3, 0], [2., 2, 2, 2]), [0, 1, 0, -1])

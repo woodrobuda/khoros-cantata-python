@@ -129,6 +129,11 @@ def register_all(reg):
     r(SG, 'kcorr', _binary(lambda a, b, p: S.kcorrelate(a, b, p.get('mode', 'full'), p.get('norm'))), ('i1', 'i2'))
     r(SG, 'kpsd', lambda p, i: (lambda f, P: {'o': P, 'o2': f})(*S.kpsd(value(i['i']), p.get('fs', 1.0), p.get('method', 'periodogram'))), outputs=('o', 'o2'))
     r(SG, 'kspectrum', _unary(lambda x, p: S.kspectrum(x, 0, p.get('output', 'magnitude'), bool(p.get('db', 0)))))
+    r(SG, 'kema', _unary(lambda x, p: S.kema(x, p.get('span'), p.get('alpha'))))
+    r(SG, 'krunstats', _unary(lambda x, p: S.krunstats(x, p.get('stat', 'mean'), p.get('window'))))
+    r(SG, 'kdelay', _unary(lambda x, p: S.kdelay(x, p.get('n', 1), p.get('fill', 0.0))))
+    r(SG, 'kdiff', _unary(lambda x, p: S.kdiff(x, p.get('fill', 0.0))))
+    r(SG, 'kcross', _binary(lambda a, b, p: S.kcross(a, _const_or(b, p))), ('i1', 'i2'))
     r(SG, 'kdwt', lambda p, i: {'o': S.kdwt(value(i['i']), p.get('wavelet', 'haar'), p.get('levels', 1))})
     r(SG, 'kidwt', lambda p, i: {'o': S.kidwt(i['i'], p.get('wavelet', 'haar'))})
     # ---- IMAGE

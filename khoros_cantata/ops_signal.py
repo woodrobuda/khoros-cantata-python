@@ -254,3 +254,54 @@ def kidwt(coeffs, wavelet='haar'):
         idx = (np.arange(0, n, 2)[:, None] + np.arange(h.size)[None, :]) % n
         np.add.at(y, idx, a[:, None] * h[None, :] + np.asarray(d)[:, None] * g[None, :]); a = y
     return a
+
+# ---------------------------------------------------------------- causal time-series primitives
+def kema(x, span=None, alpha=None):
+    """Exponential moving average along axis 0: y0 = x0, y_t = a x_t + (1-a) y_{t-1};
+    a = alpha or 2/(span+1)."""
+    a = float(alpha) if alpha is not None else 2.0 / (float(span or 20) + 1)
+    x = np.asarray(x, float)
+    if x.shape[0] == 0: return x.copy()
+    zi = (1 - a) * x[0]
+    y, _ = _sig.lfilter([a], [1, -(1 - a)], x[1:], axis=0, zi=np.expand_dims(zi, 0)) if x.shape[0] > 1 else (x[1:], None)
+    return np.concatenate([x[:1], y], axis=0)
+
+
+def krunstats(x, stat='mean', window=None):
+    """Causal running statistic along axis 0 (mean, var, std, min, max, sum).
+    window=None: cumulative from the start; window=n: trailing window of up to n samples."""
+    x = np.asarray(x, float); n = x.shape[0]
+    if window is None:
+        c = np.arange(1, n + 1).reshape((-1,) + (1,) * (x.ndim - 1))
+        if stat == 'sum': return np.cumsum(x, 0)
+        if stat == 'mean': return np.cumsum(x, 0) / c
+        if stat in ('var', 'std'):
+            m = np.cumsum(x, 0) / c; v = np.maximum(np.cumsum(x * x, 0) / c - m * m, 0)
+            return np.sqrt(v) if stat == 'std' else v
+        if stat == 'min': return np.minimum.accumulate(x, 0)
+        if stat == 'max': return np.maximum.accumulate(x, 0)
+        raise ValueError(stat)
+    w = int(window); out = np.empty_like(x)
+    f = {'mean': np.mean, 'var': np.var, 'std': np.std, 'min': np.min, 'max': np.max, 'sum': np.sum}[stat]
+    for t in range(n): out[t] = f(x[max(0, t - w + 1):t + 1], axis=0)
+    return out
+
+
+def kdelay(x, n=1, fill=0.0):
+    x = np.asarray(x, float); n = int(n)
+    if n == 0: return x.copy()
+    return np.concatenate([np.full((min(n, x.shape[0]),) + x.shape[1:], fill), x[:max(x.shape[0] - n, 0)]], 0)
+
+
+def kdiff(x, fill=0.0):
+    """First difference y_t = x_t - x_{t-1}; y_0 = fill."""
+    x = np.asarray(x, float); return np.concatenate([np.full((min(1, x.shape[0]),) + x.shape[1:], fill), np.diff(x, axis=0)], 0)
+
+
+def kcross(a, b):
+    """Crossover events: +1 where a crosses above b at t, -1 where it crosses below, else 0 (t=0 -> 0)."""
+    d = np.sign(np.asarray(a, float) - np.asarray(b, float)); above = d > 0
+    out = np.zeros(d.shape)
+    if d.shape[0] > 1:
+        out[1:] = np.where(above[1:] & ~above[:-1], 1.0, np.where(~above[1:] & above[:-1], -1.0, 0.0))
+    return out
