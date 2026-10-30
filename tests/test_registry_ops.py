@@ -109,6 +109,7 @@ CASES = {
     'kdelay': ({'n': 1}, {'i': [1.0, 2.0]}, lambda o: np.allclose(o['o'], [0, 1])),
     'kdiff': ({}, {'i': [1.0, 4.0]}, lambda o: np.allclose(o['o'], [0, 3])),
     'kcross': ({}, {'i1': [0.0, 2.0, 0.0], 'i2': [1.0, 1.0, 1.0]}, lambda o: np.allclose(o['o'], [0, 1, -1])),
+    'khilbert': ({}, {'i': np.cos(2 * np.pi * np.arange(64) / 8)}, lambda o: np.allclose(o['o'], 1)),
     'kdwt': ({'levels': 1}, {'i': [1.0, 1.0]}, lambda o: np.allclose(o['o'][0], [np.sqrt(2)])),
     'kidwt': ({}, {'i': [np.array([np.sqrt(2)]), np.array([0.0])]}, lambda o: np.allclose(o['o'], [1, 1])),
     'imedian': ({'wsize': 3}, {'i': img}, lambda o: o['o'].shape == img.shape),

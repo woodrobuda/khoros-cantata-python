@@ -134,6 +134,7 @@ def register_all(reg):
     r(SG, 'kdelay', _unary(lambda x, p: S.kdelay(x, p.get('n', 1), p.get('fill', 0.0))))
     r(SG, 'kdiff', _unary(lambda x, p: S.kdiff(x, p.get('fill', 0.0))))
     r(SG, 'kcross', _binary(lambda a, b, p: S.kcross(a, _const_or(b, p))), ('i1', 'i2'))
+    r(SG, 'khilbert', _unary(lambda x, p: S.khilbert(x, p.get('output', 'envelope'))))
     r(SG, 'kdwt', lambda p, i: {'o': S.kdwt(value(i['i']), p.get('wavelet', 'haar'), p.get('levels', 1))})
     r(SG, 'kidwt', lambda p, i: {'o': S.kidwt(i['i'], p.get('wavelet', 'haar'))})
     # ---- IMAGE

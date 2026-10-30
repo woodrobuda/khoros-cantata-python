@@ -305,3 +305,10 @@ def kcross(a, b):
     if d.shape[0] > 1:
         out[1:] = np.where(above[1:] & ~above[:-1], 1.0, np.where(~above[1:] & above[:-1], -1.0, 0.0))
     return out
+
+
+def khilbert(x, output='envelope'):
+    """Analytic-signal (Hilbert) transform along axis 0: envelope, phase, or imag (Hilbert transform).
+    Uses the whole record (FFT), so it is NOT causal."""
+    z = _sig.hilbert(np.asarray(x, float), axis=0)
+    return {'envelope': np.abs(z), 'phase': np.unwrap(np.angle(z), axis=0), 'imag': np.imag(z)}[output]
