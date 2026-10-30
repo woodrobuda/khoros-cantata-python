@@ -10,6 +10,13 @@
   and connections after `#GlyphEnd` (previously dropped).
 - `check`/`inventory` CLI report SKIP / unavailable instead of erroring when `historical_source/` is absent.
 - Packaging: explicit `packages`, new `scipy` dependency.
+- Causal streaming mode (`khoros_cantata.streaming`, `docs/STREAMING.md`): `StreamingExecutor` pushes
+  samples/chunks through a workspace with per-glyph state; operators declare a stateful `StreamOp`;
+  non-causal glyphs are rejected unless wrapped in `STREAM:krolling -window N`; `find_lookahead` /
+  `assert_no_lookahead` verification utility; `batch_execute` runs the same graph in batch.
+- New causal operators `kema`, `krunstats`, `kdelay`, `kdiff`, `kcross`; new (non-causal) `khilbert`.
+- Example: `examples/streaming_ema_crossover.{wk,py}` (EMA 10/40 crossover on a synthetic price series).
+- `OPERATORS_STATUS.md` gains a streamable column.
 
 ## 0.22.0 — Phase 22 release
 
