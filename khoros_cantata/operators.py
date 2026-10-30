@@ -172,6 +172,7 @@ def register_all(reg):
     r(GE, 'ggencmap', _source(lambda p: D.ggencmap(p.get('n', 256), p.get('scheme', 'grey'))), ())
     r(GE, 'gcolorize', _binary(lambda a, b, p: D.gcolorize(a, b, p.get('min'), p.get('max'))), ('i1', 'i2'))
     r(GE, 'gextents', lambda p, i: (lambda lo, hi: {'o': lo, 'o2': hi})(*D.gextents(value(i['i']))), outputs=('o', 'o2'))
+    r(GE, 'ggridder2d', _binary(lambda a, b, p: D.ggridder2d(a, b, p.get('wsize', 32), p.get('hsize', 32), None, p.get('method', 'linear'))), ('i1', 'i2'))
     r(GE, 'kslicer', _unary(lambda x, p: D.kslicer(x, 'whdte'.index(p.get('axis', 'd')), p.get('index', 0))))
     # toolbox-agnostic lookup: let '*' resolve any operator by name too
     for (tb, name), opobj in list(reg._ops.items()):

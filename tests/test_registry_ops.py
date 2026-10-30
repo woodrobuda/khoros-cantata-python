@@ -141,6 +141,7 @@ CASES = {
     'kcolorspace': ({'conv': 'rgb2grey'}, {'i': np.ones((2, 3))}, lambda o: np.allclose(o['o'], 1)),
     'ggencmap': ({'n': 4}, {}, lambda o: o['o'].shape == (4, 3)),
     'gcolorize': ({}, {'i1': [0.0, 1.0]}, lambda o: o['o'].shape == (2, 3)),
+    'ggridder2d': ({'wsize': 5, 'hsize': 5}, {'i1': [[0, 0], [1, 0], [0, 1], [1, 1]], 'i2': [0.0, 1, 0, 1]}, lambda o: np.allclose(o['o'][:, 2], np.linspace(0, 1, 5))),
     'gextents': ({}, {'i': [[0, 1], [2, -1]]}, lambda o: o['o'].tolist() == [0, -1]),
     'kslicer': ({'axis': 'd', 'index': 1}, {'i': np.arange(8).reshape(2, 2, 2)}, lambda o: o['o'].tolist() == [[1, 3], [5, 7]]),
 }

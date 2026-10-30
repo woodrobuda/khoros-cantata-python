@@ -366,3 +366,12 @@ def gcolorize(x, cmap=None, vmin=None, vmax=None):
 def gextents(loc):
     """Bounding box of location data (last axis = coordinate): (mins, maxs)."""
     p = np.asarray(loc, float).reshape(-1, np.asarray(loc).shape[-1]); return p.min(0), p.max(0)
+
+
+def ggridder2d(points, values, wsize, hsize, bounds=None, method='linear', fill=0.0):
+    """Grid scattered 2-D samples onto a regular wsize x hsize grid (axis 0 = x)."""
+    from scipy.interpolate import griddata
+    p = np.asarray(points, float); v = np.asarray(values, float)
+    x0, x1, y0, y1 = bounds or (p[:, 0].min(), p[:, 0].max(), p[:, 1].min(), p[:, 1].max())
+    gx, gy = np.meshgrid(np.linspace(x0, x1, int(wsize)), np.linspace(y0, y1, int(hsize)), indexing='ij')
+    return griddata(p, v, (gx, gy), method=method, fill_value=fill)
