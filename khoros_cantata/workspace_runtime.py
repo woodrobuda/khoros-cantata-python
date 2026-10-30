@@ -121,24 +121,53 @@ class NativeOperatorRegistry:
     def register(self,tb,oname,fn,inputs=None,outputs=None): self._ops[(tb.upper(),oname.lower())]=NativeOperator(fn,inputs,outputs)
     def resolve(self,tb,oname): return self._ops.get((tb.upper(),oname.lower())) or self._ops.get(('*',oname.lower()))
     def _register_defaults(self):
+        import numpy as _np
+        def _arr(x):
+            # Scalars stay Python scalars (historical behavior); sequences become ndarrays.
+            return _np.asarray(x) if isinstance(x,(list,tuple,_np.ndarray)) else x
         unary={
-            'kneg':lambda x:-x,'kabs':abs,'ksqr':lambda x:x*x,'ksqrt':lambda x:x**0.5,
-            'krecip':lambda x:1/x,'kcbrt':lambda x:x**(1/3),'kcube':lambda x:x**3,
-            'kfloor':lambda x:int(x//1),'ktruncate':lambda x:int(x),'kbitnot':lambda x:~int(x)}
-        for name,fn in unary.items(): self.register('DATAMANIP',name,lambda p,i,f=fn:{'o':f(i['i'])})
-        self.register('DATAMANIP','ksub',lambda p,i:{'o':i['i1']-i['i2']})
-        self.register('DATAMANIP','kadd',lambda p,i:{'o':i['i1']+i['i2']})
-        self.register('DATAMANIP','kmul',lambda p,i:{'o':i['i1']*i['i2']})
-        self.register('DATAMANIP','kdiv',lambda p,i:{'o':i['i1']/i['i2']})
+            'kneg':_np.negative,'kabs':_np.abs,'ksqr':_np.square,'ksqrt':_np.sqrt,
+            'krecip':lambda x:_np.reciprocal(_np.asarray(x,dtype=float)),'kcbrt':_np.cbrt,'kcube':lambda x:_np.power(x,3),
+            'kfloor':lambda x:_np.floor(x).astype(int),'ktruncate':lambda x:_np.trunc(x).astype(int),
+            'kbitnot':lambda x:_np.invert(_np.asarray(x).astype(_np.int64))}
+        def _wrap(f):
+            def op(p,i):
+                x=_arr(i['i']); r=f(x)
+                if not isinstance(x,_np.ndarray) and _np.ndim(r)==0: r=r.item() if hasattr(r,'item') else r
+                return {'o':r}
+            return op
+        for name,fn in unary.items(): self.register('DATAMANIP',name,_wrap(fn))
+        for name,f in {'ksub':_np.subtract,'kadd':_np.add,'kmul':_np.multiply,'kdiv':_np.true_divide}.items():
+            def op(p,i,f=f):
+                a,b=_arr(i['i1']),_arr(i['i2']); r=f(a,b)
+                if _np.ndim(r)==0 and not isinstance(a,_np.ndarray) and not isinstance(b,_np.ndarray): r=r.item()
+                return {'o':r}
+            self.register('DATAMANIP',name,op)
         self.register('DATAMANIP','kclip',self._clip)
         self.register('DATAMANIP','kclipout',self._clip)
         self.register('DATAMANIP','kmegaclip',lambda p,i:{'o':i.get('i')})
-        self.register('DATAMANIP','kcmplx2real',lambda p,i:{'om':abs(i['i']) if p.get('logmag1') else i['i'].real if hasattr(i['i'],'real') else i['i']})
+        def _c2r(p,i):
+            x=_arr(i['i'])
+            return {'om':_np.abs(x) if p.get('logmag1') else _np.real(x) if _np.iscomplexobj(x) else x}
+        self.register('DATAMANIP','kcmplx2real',_c2r)
         self.register('*','identity',lambda p,i:{'o':i.get('i')})
+        try:
+            from .operators import register_all
+            register_all(self)
+        except ImportError:
+            pass
     @staticmethod
     def _clip(p,i):
+        """Clamp to [lc, uc]; either bound may be absent (None). A bound of 0 is a real bound."""
+        import numpy as _np
         x=i['i']; lc=p.get('lc'); uc=p.get('uc')
-        def one(v): return max(lc,v) if uc is None else min(uc,max(lc or v,v)) if lc is not None else min(uc,v)
+        if lc is not None and uc is not None and lc>uc: raise ValueError('kclip: lower bound exceeds upper bound')
+        def one(v):
+            if lc is not None: v=max(lc,v)
+            if uc is not None: v=min(uc,v)
+            return v
+        if isinstance(x,_np.ndarray):
+            return {'o':_np.clip(x,lc,uc) if (lc is not None or uc is not None) else x.copy()}
         try: return {'o':[one(v) for v in x]}
         except TypeError: return {'o':one(x)}
 

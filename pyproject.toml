@@ -11,3 +11,6 @@ dependencies = ["numpy>=1.24"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["khoros_cantata"]

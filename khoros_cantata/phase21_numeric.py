@@ -19,8 +19,14 @@ class CorpusSummary:
     suites_with_results:int; suites_with_scripts:int
 
 
+def corpus_available(root=ROOT):
+    return (Path(root)/'testsuite').is_dir()
+
+
 def inventory(root=ROOT):
-    ts=root/'testsuite'; suites=[]; scripts=[]; results=[]
+    root=Path(root); ts=root/'testsuite'; suites=[]; scripts=[]; results=[]
+    if not ts.is_dir():
+        return CorpusSummary(0,0,0,0,0,0), []
     for d in sorted(p for p in ts.iterdir() if p.is_dir()):
         sh=sorted(d.glob('test*.sh')); rr=sorted(d.rglob('*.results/*'))
         if sh or rr:
@@ -83,14 +89,11 @@ def conv1d_khoros(seq,kernel,w0=0,extended=False):
     # Truncated output starts at the requested origin; extended output adds
     # the full kernel support at the right.
     start=int(w0); n=len(x) if not extended else len(x)+len(k)-1
-    out=[]
-    for j in range(start,start+n):
-        s=0.0
-        for q,kv in enumerate(k):
-            ix=j-q
-            s += (x[ix] if 0<=ix<len(x) else 0.0)*kv
-        out.append(s)
-    return np.asarray(out)
+    if len(x)==0 or len(k)==0: return np.zeros(n)
+    # Vectorized: full convolution index j == y[j]; indices outside support are 0.
+    full=np.convolve(x,k,'full'); out=np.zeros(n)
+    j=np.arange(start,start+n); ok=(j>=0)&(j<len(full)); out[ok]=full[j[ok]]
+    return out
 
 
 def stats(a):
@@ -112,6 +115,8 @@ def run_phase21_checks():
         t=time.perf_counter()
         try:
             ok,detail=fn(); status='PASS' if ok else 'FAIL'
+        except FileNotFoundError as e:
+            status='SKIP'; detail={'reason':'historical corpus file missing (set KHOROS_SOURCE_ROOT)','missing':str(e.filename or e)}
         except Exception as e:
             ok=False; status='ERROR'; detail={'error':repr(e)}
         out.append({'name':name,'category':category,'status':status,'elapsed_s':time.perf_counter()-t,'detail':detail})
@@ -130,7 +135,7 @@ def run_phase21_checks():
     return out
 
 
-def _ascii(path): return np.fromstring(Path(path).read_text(),sep=' ')
+def _ascii(path): return np.array(Path(path).read_text().split(),dtype=float)
 
 def _atan_roundtrip(base):
     x,_=viff_value(base/'3x4masked.double.viff'); y=np.tan(np.arctan(x)); return compare(y,x,1e-12)

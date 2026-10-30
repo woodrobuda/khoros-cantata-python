@@ -9,7 +9,7 @@ import argparse
 import json
 from pathlib import Path
 from .workspace_runtime import HistoricalWorkspaceParser, WorkspaceExecutor, example_registry
-from .phase21_numeric import run_phase21_checks, inventory
+from .phase21_numeric import run_phase21_checks, inventory, corpus_available, ROOT
 
 
 def cmd_inspect(path: Path) -> int:
@@ -36,11 +36,18 @@ def cmd_check() -> int:
     """Run the Phase 21 numerical compatibility checks."""
     results = run_phase21_checks()
     print(json.dumps(results, indent=2, default=str))
-    return 0 if all(r["status"] == "PASS" for r in results) else 1
+    skipped = sum(r["status"] == "SKIP" for r in results)
+    if skipped:
+        print(f"note: {skipped} check(s) skipped: historical corpus not found at {ROOT} (set KHOROS_SOURCE_ROOT)")
+    return 0 if all(r["status"] in ("PASS", "SKIP") for r in results) else 1
 
 
 def cmd_inventory() -> int:
     """Show the recovered historical DATAMANIP test inventory."""
+    if not corpus_available():
+        print(f"historical corpus not found at {ROOT}; set KHOROS_SOURCE_ROOT to enable the inventory")
+        print(json.dumps({"available": False}, indent=2))
+        return 0
     summary, _ = inventory()
     print(json.dumps(summary.__dict__, indent=2))
     return 0
