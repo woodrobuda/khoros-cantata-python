@@ -51,10 +51,11 @@ class HistoricalWorkspaceParser:
             if not line: continue
             if line == '#GlyphBegin' or line == '#ConnectionBegin':
                 mode='glyph' if 'Glyph' in line else 'connection'; continue
+            # End markers must be handled before the generic comment skip, otherwise the
+            # glyph mode leaks past #GlyphEnd and NodeConnection lines are swallowed.
+            if line in ('#ConnectionEnd','#GlyphEnd'): mode=None; continue
             if line.startswith('#') and not line.startswith('#Annotations') and not line.startswith('#Variables'):
                 continue
-            if line == '#ConnectionEnd': mode=None; continue
-            if line == '#GlyphEnd': mode=None; continue
             if line == '#AnnotationsBegin':
                 while i<len(lines) and lines[i].strip()!='#AnnotationsEnd':
                     if lines[i].strip(): out.annotations.append(lines[i].rstrip())
@@ -73,6 +74,14 @@ class HistoricalWorkspaceParser:
                 if i<len(lines): i+=1
                 continue
             if line.startswith('Glyph:'):
+                # Khoros 2.x cantata form: Glyph:TB:ONAME:LABEL:ID:X:Y:VARS:COMMAND
+                # (LABEL usually empty, e.g. "Glyph:DATAMANIP:kfft::7:185:225:: -dir 0").
+                q=line.split(':',8)
+                if len(q)>=8 and not q[3].lstrip('-').isdigit() and q[4].lstrip('-').isdigit():
+                    try:
+                        out.glyphs.append(HistoricalGlyph(q[1],q[2],q[3] or q[2],int(q[4]),int(q[5]),int(q[6]),q[7],q[8] if len(q)>8 else ''))
+                        continue
+                    except ValueError: pass
                 p=line.split(':',8)
                 if len(p)>=8:
                     _,tb,oname,ident,x,y,variables,rest = p[:8] if len(p)==8 else (p[0],p[1],p[2],p[3],p[4],p[5],p[6],':'.join(p[7:]))
@@ -121,24 +130,53 @@ class NativeOperatorRegistry:
     def register(self,tb,oname,fn,inputs=None,outputs=None): self._ops[(tb.upper(),oname.lower())]=NativeOperator(fn,inputs,outputs)
     def resolve(self,tb,oname): return self._ops.get((tb.upper(),oname.lower())) or self._ops.get(('*',oname.lower()))
     def _register_defaults(self):
+        import numpy as _np
+        def _arr(x):
+            # Scalars stay Python scalars (historical behavior); sequences become ndarrays.
+            return _np.asarray(x) if isinstance(x,(list,tuple,_np.ndarray)) else x
         unary={
-            'kneg':lambda x:-x,'kabs':abs,'ksqr':lambda x:x*x,'ksqrt':lambda x:x**0.5,
-            'krecip':lambda x:1/x,'kcbrt':lambda x:x**(1/3),'kcube':lambda x:x**3,
-            'kfloor':lambda x:int(x//1),'ktruncate':lambda x:int(x),'kbitnot':lambda x:~int(x)}
-        for name,fn in unary.items(): self.register('DATAMANIP',name,lambda p,i,f=fn:{'o':f(i['i'])})
-        self.register('DATAMANIP','ksub',lambda p,i:{'o':i['i1']-i['i2']})
-        self.register('DATAMANIP','kadd',lambda p,i:{'o':i['i1']+i['i2']})
-        self.register('DATAMANIP','kmul',lambda p,i:{'o':i['i1']*i['i2']})
-        self.register('DATAMANIP','kdiv',lambda p,i:{'o':i['i1']/i['i2']})
+            'kneg':_np.negative,'kabs':_np.abs,'ksqr':_np.square,'ksqrt':_np.sqrt,
+            'krecip':lambda x:_np.reciprocal(_np.asarray(x,dtype=float)),'kcbrt':_np.cbrt,'kcube':lambda x:_np.power(x,3),
+            'kfloor':lambda x:_np.floor(x).astype(int),'ktruncate':lambda x:_np.trunc(x).astype(int),
+            'kbitnot':lambda x:_np.invert(_np.asarray(x).astype(_np.int64))}
+        def _wrap(f):
+            def op(p,i):
+                x=_arr(i['i']); r=f(x)
+                if not isinstance(x,_np.ndarray) and _np.ndim(r)==0: r=r.item() if hasattr(r,'item') else r
+                return {'o':r}
+            return op
+        for name,fn in unary.items(): self.register('DATAMANIP',name,_wrap(fn))
+        for name,f in {'ksub':_np.subtract,'kadd':_np.add,'kmul':_np.multiply,'kdiv':_np.true_divide}.items():
+            def op(p,i,f=f):
+                a,b=_arr(i['i1']),_arr(i['i2']); r=f(a,b)
+                if _np.ndim(r)==0 and not isinstance(a,_np.ndarray) and not isinstance(b,_np.ndarray): r=r.item()
+                return {'o':r}
+            self.register('DATAMANIP',name,op)
         self.register('DATAMANIP','kclip',self._clip)
         self.register('DATAMANIP','kclipout',self._clip)
         self.register('DATAMANIP','kmegaclip',lambda p,i:{'o':i.get('i')})
-        self.register('DATAMANIP','kcmplx2real',lambda p,i:{'om':abs(i['i']) if p.get('logmag1') else i['i'].real if hasattr(i['i'],'real') else i['i']})
+        def _c2r(p,i):
+            x=_arr(i['i'])
+            return {'om':_np.abs(x) if p.get('logmag1') else _np.real(x) if _np.iscomplexobj(x) else x}
+        self.register('DATAMANIP','kcmplx2real',_c2r)
         self.register('*','identity',lambda p,i:{'o':i.get('i')})
+        try:
+            from .operators import register_all
+            register_all(self)
+        except ImportError:
+            pass
     @staticmethod
     def _clip(p,i):
+        """Clamp to [lc, uc]; either bound may be absent (None). A bound of 0 is a real bound."""
+        import numpy as _np
         x=i['i']; lc=p.get('lc'); uc=p.get('uc')
-        def one(v): return max(lc,v) if uc is None else min(uc,max(lc or v,v)) if lc is not None else min(uc,v)
+        if lc is not None and uc is not None and lc>uc: raise ValueError('kclip: lower bound exceeds upper bound')
+        def one(v):
+            if lc is not None: v=max(lc,v)
+            if uc is not None: v=min(uc,v)
+            return v
+        if isinstance(x,_np.ndarray):
+            return {'o':_np.clip(x,lc,uc) if (lc is not None or uc is not None) else x.copy()}
         try: return {'o':[one(v) for v in x]}
         except TypeError: return {'o':one(x)}
 
@@ -148,17 +186,19 @@ def parse_command(command: str) -> tuple[list[str],dict[str,Any]]:
     try: toks=shlex.split(command, posix=True)
     except ValueError: toks=command.split()
     # Locate program after an optional historical absolute path.
-    program=''; args=[]
+    program=''; args=[]; started=False
     for t in toks:
-        if not program and not t.startswith('-'):
-            program=Path(t).name; continue
-        if program: args.append(t)
+        if not started and not t.startswith('-'):
+            program=Path(t).name; started=True; continue
+        # Khoros 2.x workspaces store only the options (no program name).
+        started=True; args.append(t)
     params={}; i=0
     while i<len(args):
         t=args[i]
         if t.startswith('-'):
             k=t.lstrip('-')
-            if i+1<len(args) and not args[i+1].startswith('-'): params[k]=args[i+1]; i+=2
+            nxt=args[i+1] if i+1<len(args) else None
+            if nxt is not None and (not nxt.startswith('-') or re.fullmatch(r'-\d*\.?\d+([eE][-+]?\d+)?',nxt)): params[k]=nxt; i+=2
             else: params[k]=True; i+=1
         else: i+=1
     for k,v in list(params.items()):
